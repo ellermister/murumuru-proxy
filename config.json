@@ -1,0 +1,9 @@
+{
+  "HOST": "0.0.0.0",
+  "PORT": "3333",
+  "QUALITY": "80",
+  "IMG_PATH": "/app",
+  "EXHAUST_PATH": "/exhaust",
+  "ALLOWED_TYPES": ["jpg","png","jpeg","bmp"],
+  "ENABLE_AVIF": false
+}

@@ -1,0 +1,46 @@
+version: "3"
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./myapp:/app
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - b1
+    depends_on:
+      - muru-proxy
+  php-fpm:
+      image: bitnami/php-fpm:latest
+      volumes:
+      - ./myapp:/app
+      - ./php.ini:/opt/bitnami/php/etc/conf.d/php.ini
+      networks:
+        - b1
+  muru-proxy:
+    image: ellermister/murumuru-proxy:latest
+    volumes:
+      - ./myapp:/app
+      - exhaust:/exhaust
+      - ./proxy.php:/muru-proxy/proxy.php
+    networks:
+      - b1
+    environment:
+      WEB_ROOT: "/app"
+      CGI_WEB_ROOT: "/app"
+      CGI_URL: 'php-fpm:9000' # or unix:php.socket
+      HTTPS_ENABLED: false
+      DEBUG_OUTPUT: true
+      BASE64_INLINE_MAX_SIZE: 30720
+      LISTEN_PORT: 80
+
+networks:
+  b1:
+    driver: bridge
+    ipam:
+      config:
+          - subnet: 172.23.0.0/24
+volumes:
+  exhaust:
