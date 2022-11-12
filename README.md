@@ -4,7 +4,7 @@
 
 ## Muru-Proxy
 
-简单快速地实现将网站访客体验优化
+一个优化页面速度的代理服务器
 
 通过增加中间件的形式，把返回的 HTML 页面进行处理优化再响应给用户浏览器。
 
@@ -32,6 +32,7 @@
 - 默认开启伪静态
 - 需要创建 dist 目录用于缓存文件存储
 - 只适用于 php-fpm 项目
+- 可能影响 JavaScript 的加载顺序
 
 
 
@@ -41,7 +42,7 @@
 
 
 
-## Docker 配置
+## Docker
 
 使用 Docker 快速配置, 参考 `docker-compose.yml`
 
@@ -52,13 +53,16 @@ docker-compose up -d
 
 
 
-
 ### 参数说明
+
+如下为主要配置说明，结合 `docker-compose.yml` 文件中的例子配置进行理解。
+- WEB_ROOT 和 CGI_WEB_ROOT 有可能一样，有可能地址不一样，取决于你如何配置 php-fpm。
+
 
 ```yaml
     environment:
       WEB_ROOT: "/app" # 容器内网站目录,不变
-      CGI_WEB_ROOT: "/app/default.com/public_html" # CGI得到的网站目录，取决于你 php-fpm 配置在哪里
+      CGI_WEB_ROOT: "/app/default.com/public" # CGI 得到的网站目录，取决于你 php-fpm 配置在哪里
       CGI_URL: '172.22.0.10:9000' # or unix:php.socket # CGI通信地址
       HTTPS_ENABLED: false # 站点是否开启HTTPS
       DEBUG_OUTPUT: true # 是否显示调试日志
@@ -69,7 +73,8 @@ docker-compose up -d
 
 
 
-## Nginx 配置
+
+## Nginx
 
 启动后服务在容器的  `172.22.0.12` 运行,可以从宿主机进行代理访问，在容器网络内也可以通过容器名访问。
 
