@@ -128,8 +128,8 @@ class StaticResource
 
         if (preg_match_all('#<link.*?href=(?:"|\')(?=.*\.css.*)([^"|\']+)(?:"|\').*?>#i', $html, $matches)) {
             $all = [];
-            $pathDir = dirname($path_info);
-            !is_dir($pathDir. $pathDir) && $pathDir = '/';
+
+            $pathDir = $this->getScriptFileDir($webRoot, $path_info);
 
             // http 或 / 路径形式的本站资源
             $replaceSources = [];
@@ -154,7 +154,7 @@ class StaticResource
             if (!is_file($webRoot . $all_css) || DISABLE_CACHE) {
                 $bigCssContent = '';
                 foreach ($all as $cssFile) {
-                    $cssPath = $webRoot .$pathDir .$cssFile;
+                    $cssPath = $pathDir .$cssFile;
                     if (is_file($cssPath)) {
                         $raw = file_get_contents($cssPath);
 
@@ -191,8 +191,8 @@ class StaticResource
     public function minimizeLess(string $html, string $webRoot, string $host, $path_info){
         if (preg_match_all('#<link.*?href=(?:"|\')(?=.*\.less.*)([^"|\']+)(?:"|\').*?>#i', $html, $matches)) {
             $all = [];
-            $pathDir = dirname($path_info);
-            !is_dir($pathDir. $pathDir) && $pathDir = '/';
+
+            $pathDir = $this->getScriptFileDir($webRoot, $path_info);
 
             // http 或 / 路径形式的本站资源
             $replaceSources = [];
@@ -217,7 +217,7 @@ class StaticResource
             if (!is_file($webRoot . $all_less) || DISABLE_CACHE) {
                 $bigLessContent = '';
                 foreach ($all as $cssFile) {
-                    $cssPath = $webRoot .$pathDir .$cssFile;
+                    $cssPath = $pathDir .$cssFile;
                     if (is_file($cssPath)) {
                         $raw = file_get_contents($cssPath);
 
@@ -236,11 +236,25 @@ class StaticResource
             }
 
             $html = str_replace($replaceSources, '', $html);
-
+            //<link rel="stylesheet/less" type="text/css" href="styles.less" />
             $html = str_replace('<head>', '<head><link rel="stylesheet/less" type="text/css"  href="' . $all_less . '" />', $html);
         }
 
         return $html;
+    }
+
+    public function getScriptFileDir($webRoot, $pathInfo)
+    {
+        $pathInfo = '/' . (ltrim($pathInfo, '/'));
+        $extension = pathinfo($pathInfo, PATHINFO_EXTENSION);
+        if (empty($extension)) {
+            $pathInfo = rtrim($pathInfo, '/') . '/' . 'index.php';
+        }
+
+        if(is_file($webRoot.$pathInfo)){
+            return dirname($webRoot.$pathInfo);
+        }
+        return $webRoot;
     }
 
     public function minimizeJs(string $html, string $webRoot, string $host, $path_info)
@@ -249,16 +263,15 @@ class StaticResource
         if (preg_match_all('#<script.*?src=(?:"|\')(?=.*\.js.*)([^"|\']+)(?:"|\').*?>.*?</script>#i', $html, $matches)) {
             $all = [];
 
-            $pathDir = dirname($path_info);
-            !is_dir($pathDir. $pathDir) && $pathDir = '/';
 
+            $pathDir = $this->getScriptFileDir($webRoot, $path_info);
 
             $replaceSources = [];
             $cacheFileNames = [];
             foreach ($matches[1] as $index => $match) {
 
                 if (preg_match(sprintf('#https?://%s(/.*\.js)#is', addslashes($host)), $match, $domainMatches)) {
-                    $all[] = $domainMatches[2];
+                    $all[] = $domainMatches[1];
                     $cacheFileNames []= $match;
                     $replaceSources[] = $matches[0][$index];
                 }else if(preg_match('#^(?!http|//)(.*\.js)#is', $match, $domainMatches)) {
@@ -275,7 +288,7 @@ class StaticResource
                 $bigJsContent = '';
                 foreach ($all as $jsFile) {
 
-                    $jsPath = $webRoot .$pathDir .$jsFile;
+                    $jsPath = $pathDir .$jsFile;
 
                     if (is_file($jsPath)) {
                         $raw = file_get_contents($jsPath);
