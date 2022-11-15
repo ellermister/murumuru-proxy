@@ -67,7 +67,8 @@ class StaticResource
         $raw = preg_replace(sprintf('#(?:https?:)?//%s/#is', addslashes($host)), '/', $raw);
 
         // fix with full path
-        $raw = preg_replace_callback('~url\((?!(?:\/|\/\/|http|data))([^\)]+)\)~', function ($matches) use ($selfPath) {
+        // char '@' from less
+        $raw = preg_replace_callback('~url\((?!(?:\/|\/\/|http|data|@))([^\)]+)\)~', function ($matches) use ($selfPath) {
             $fileQuery = $matches[1];
             $file = trim($fileQuery, "'\"");
             $file = preg_replace('#(\?|\#).*#', '', $file);
@@ -96,6 +97,27 @@ class StaticResource
             }
             return $result;
         }, $raw);
+
+        // replace with inline resource for less
+        // @icon-reviews: "/icon-reviews.svg"
+
+        $raw = preg_replace_callback('~@[A-Za-z][A-Za-z0-9-_]*:\s+"(?=/[A-Za-z].*(?:svg|png|jpg|jpeg|gif))([^"]+)"~', function ($matches) use ($selfPath) {
+            $fileQuery = $matches[1];
+            $file = trim($fileQuery, "'\"");
+            $file = preg_replace('#(\?|\#).*#', '', $file);
+            $path = WEB_ROOT . '/' . $file;
+
+            $result = $matches[0];
+            if (is_file($path) && filesize($path) < BASE64_INLINE_MAX_SIZE) {
+                $binBase64 = base64_encode(file_get_contents($path));
+                $mine = mime_content_type($path);
+                $inlineBase64Resource = sprintf("data:%s;base64,%s", $mine, $binBase64);
+                str_debug('base64-inline', sprintf("source:%s to base64-inline size: %s", $matches[1], filesize($path)));
+
+                $result = str_replace($matches[1], $inlineBase64Resource, $matches[0]);
+            }
+            return $result;
+        }, $raw);
         return $raw;
     }
 
@@ -107,6 +129,7 @@ class StaticResource
         if (preg_match_all('#<link.*?href=(?:"|\')(?=.*\.css.*)([^"|\']+)(?:"|\').*?>#i', $html, $matches)) {
             $all = [];
             $pathDir = dirname($path_info);
+            !is_dir($pathDir. $pathDir) && $pathDir = '/';
 
             // http 或 / 路径形式的本站资源
             $replaceSources = [];
@@ -160,6 +183,63 @@ class StaticResource
 
             $html = str_replace('</head>', '<link href="' . $all_css . '" rel="stylesheet" /> </head>', $html);
         }
+
+        $html = $this->minimizeLess(...func_get_args());
+        return $html;
+    }
+
+    public function minimizeLess(string $html, string $webRoot, string $host, $path_info){
+        if (preg_match_all('#<link.*?href=(?:"|\')(?=.*\.less.*)([^"|\']+)(?:"|\').*?>#i', $html, $matches)) {
+            $all = [];
+            $pathDir = dirname($path_info);
+            !is_dir($pathDir. $pathDir) && $pathDir = '/';
+
+            // http 或 / 路径形式的本站资源
+            $replaceSources = [];
+            $cacheFileNames = [];
+            foreach ($matches[1] as  $index => $match) {
+                // 过滤掉非本站资源的链接
+
+                if (preg_match(sprintf('#https?://%s(/.*\.less)#is', addslashes($host)), $match, $domainMatches)) {
+                    $all[] = $domainMatches[1];
+                    $replaceSources[] = $matches[0][$index];
+                    $cacheFileNames []= $match;
+                }else if(preg_match('#^(?!http|//)(.*\.less)#is', $match, $domainMatches)) {
+                    $all[] = $domainMatches[1];
+                    $replaceSources[] = $matches[0][$index];
+                    $cacheFileNames []= $match;
+                }
+
+            }
+            $cacheKey = md5(implode('', $cacheFileNames));
+            $all_less = sprintf('%sall_less_%s.less', MINIFY_DIST, $cacheKey);
+
+            if (!is_file($webRoot . $all_less) || DISABLE_CACHE) {
+                $bigLessContent = '';
+                foreach ($all as $cssFile) {
+                    $cssPath = $webRoot .$pathDir .$cssFile;
+                    if (is_file($cssPath)) {
+                        $raw = file_get_contents($cssPath);
+
+                        $raw = $this->extremeInlineResource($cssPath, $raw, $host);
+
+                        $bigLessContent .= $raw;
+                    } else {
+                        // warning output, css file not found!
+                        str_debug('minimized', sprintf('css file not found: %s', $cssPath), 'warning');
+                    }
+                }
+
+                file_put_contents($webRoot . $all_less, $bigLessContent);
+
+                str_debug('minimized', sprintf("file to %s", $all_less));
+            }
+
+            $html = str_replace($replaceSources, '', $html);
+
+            $html = str_replace('<head>', '<head><link rel="stylesheet/less" type="text/css"  href="' . $all_less . '" />', $html);
+        }
+
         return $html;
     }
 
@@ -170,6 +250,9 @@ class StaticResource
             $all = [];
 
             $pathDir = dirname($path_info);
+            !is_dir($pathDir. $pathDir) && $pathDir = '/';
+
+
             $replaceSources = [];
             $cacheFileNames = [];
             foreach ($matches[1] as $index => $match) {
@@ -332,7 +415,6 @@ class FastCGIProxy extends Swoole\Coroutine\FastCGI\Proxy
         $response = $client->execute($request, $this->timeout);
 
         $htmlMimeType = 'text/html;';
-
         if (!$skipMinimize && MINIMIZE_STATIC_RESOURCE && $this->staticHandler && substr($response->getHeader('Content-type'), 0, strlen($htmlMimeType)) == $htmlMimeType) {
             $body = $response->getBody();
             $body = $this->staticHandler->minimizeCss($body, WEB_ROOT, $host, $path_info);
